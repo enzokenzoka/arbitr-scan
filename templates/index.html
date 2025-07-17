@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Arbitrage Scanner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         * {
             margin: 0;
@@ -60,10 +59,10 @@
             border: 2px solid #27ae60;
         }
 
-        .status.disconnected {
-            background: rgba(231, 76, 60, 0.1);
-            color: #e74c3c;
-            border: 2px solid #e74c3c;
+        .status.scanning {
+            background: rgba(255, 193, 7, 0.1);
+            color: #f39c12;
+            border: 2px solid #f39c12;
         }
 
         .controls {
@@ -110,6 +109,12 @@
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .opportunities-container {
@@ -251,7 +256,7 @@
     <div class="container">
         <header>
             <h1>🚀 Crypto Arbitrage Scanner</h1>
-            <div id="status" class="status disconnected">Connecting...</div>
+            <div id="status" class="status connected">Ready to scan for opportunities</div>
         </header>
 
         <div class="controls">
@@ -265,6 +270,10 @@
             </div>
             <div class="control-group">
                 <label>&nbsp;</label>
+                <button id="scanButton" onclick="triggerScan()">🔍 Scan Now</button>
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
                 <button onclick="refreshOpportunities()">🔄 Refresh</button>
             </div>
         </div>
@@ -275,7 +284,7 @@
                 <div id="opportunitiesCount" class="opportunities-count">0 opportunities</div>
             </div>
 
-            <div id="loadingIndicator" class="loading">
+            <div id="loadingIndicator" class="loading" style="display: none;">
                 Scanning for arbitrage opportunities...
             </div>
 
@@ -299,7 +308,7 @@
 
             <div id="noOpportunities" class="no-opportunities" style="display: none;">
                 No profitable arbitrage opportunities found at the moment.
-                <br>Try lowering the minimum profit percentage.
+                <br>Try lowering the minimum profit percentage or click "Scan Now" to get fresh data.
             </div>
 
             <div id="lastUpdate" class="last-update"></div>
@@ -307,25 +316,8 @@
     </div>
 
     <script>
-        const socket = io();
         let opportunities = [];
-        let isConnected = false;
-
-        // Socket events
-        socket.on('connect', function() {
-            isConnected = true;
-            updateStatus('connected', 'Connected - Scanning for opportunities');
-            refreshOpportunities();
-        });
-
-        socket.on('disconnect', function() {
-            isConnected = false;
-            updateStatus('disconnected', 'Disconnected - Trying to reconnect...');
-        });
-
-        socket.on('connected', function(data) {
-            console.log('Server says:', data.data);
-        });
+        let isScanning = false;
 
         function updateStatus(status, message) {
             const statusElement = document.getElementById('status');
@@ -401,20 +393,61 @@
                 
                 tableBody.appendChild(row);
             });
+        }
 
-            // Update last update time
-            const lastUpdateElement = document.getElementById('lastUpdate');
-            lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        async function triggerScan() {
+            if (isScanning) return;
+            
+            isScanning = true;
+            const scanButton = document.getElementById('scanButton');
+            scanButton.disabled = true;
+            scanButton.textContent = '🔍 Scanning...';
+            
+            updateStatus('scanning', 'Scanning exchanges for new opportunities...');
+            
+            const loadingElement = document.getElementById('loadingIndicator');
+            loadingElement.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/scan');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    updateStatus('connected', `Found ${result.opportunities_found} opportunities`);
+                    await refreshOpportunities();
+                } else {
+                    updateStatus('connected', 'Scan completed');
+                }
+            } catch (error) {
+                console.error('Error triggering scan:', error);
+                updateStatus('connected', 'Error scanning - please try again');
+            } finally {
+                isScanning = false;
+                scanButton.disabled = false;
+                scanButton.textContent = '🔍 Scan Now';
+                loadingElement.style.display = 'none';
+            }
         }
 
         async function refreshOpportunities() {
             try {
                 const response = await fetch('/api/opportunities');
-                opportunities = await response.json();
+                const data = await response.json();
+                opportunities = data.opportunities || [];
+                
                 renderOpportunities();
+                
+                // Update last update time
+                const lastUpdateElement = document.getElementById('lastUpdate');
+                if (data.last_scan_time) {
+                    const lastScan = new Date(data.last_scan_time);
+                    lastUpdateElement.textContent = `Last scan: ${lastScan.toLocaleTimeString()}`;
+                } else {
+                    lastUpdateElement.textContent = 'No data yet - click "Scan Now" to get started';
+                }
             } catch (error) {
                 console.error('Error fetching opportunities:', error);
-                updateStatus('disconnected', 'Error fetching data');
+                updateStatus('connected', 'Error loading data');
             }
         }
 
@@ -422,11 +455,8 @@
         document.getElementById('minProfit').addEventListener('input', renderOpportunities);
         document.getElementById('maxResults').addEventListener('input', renderOpportunities);
 
-        // Auto-refresh every 15 seconds
-        setInterval(refreshOpportunities, 15000);
-
         // Initial load
-        setTimeout(refreshOpportunities, 1000);
+        refreshOpportunities();
     </script>
 </body>
 </html>
