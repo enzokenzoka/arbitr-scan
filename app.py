@@ -5,11 +5,11 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from flask import Flask, render_template, jsonify
-from flask_socketio import SocketIO, emit
 import logging
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -158,8 +158,9 @@ class ArbitrageScanner:
         }
         self.opportunities = []
         self.running = False
-        self.min_profit_percentage = 0.5  # Minimum 0.5% profit
+        self.min_profit_percentage = 0.5
         self.top_n_tokens = 300
+        self.last_scan_time = None
         
     async def fetch_all_prices(self):
         """Fetch prices from all exchanges concurrently"""
@@ -245,38 +246,28 @@ class ArbitrageScanner:
         opportunities.sort(key=lambda x: x.profit_percentage, reverse=True)
         return opportunities[:50]  # Return top 50 opportunities
     
-    async def scan_continuously(self):
-        """Continuously scan for arbitrage opportunities"""
-        while self.running:
-            try:
-                logger.info("Scanning for arbitrage opportunities...")
-                start_time = time.time()
-                
-                # Fetch all prices
-                all_prices = await self.fetch_all_prices()
-                
-                # Find opportunities
-                opportunities = self.find_arbitrage_opportunities(all_prices)
-                self.opportunities = opportunities
-                
-                scan_time = time.time() - start_time
-                logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities.")
-                
-                # Wait before next scan
-                await asyncio.sleep(10)  # Scan every 10 seconds
-                
-            except Exception as e:
-                logger.error(f"Error in scan loop: {e}")
-                await asyncio.sleep(5)
-    
-    async def start_scanning(self):
-        """Start the scanning process"""
-        self.running = True
-        await self.scan_continuously()
-    
-    def stop_scanning(self):
-        """Stop the scanning process"""
-        self.running = False
+    async def scan_once(self):
+        """Perform a single scan"""
+        try:
+            logger.info("Scanning for arbitrage opportunities...")
+            start_time = time.time()
+            
+            # Fetch all prices
+            all_prices = await self.fetch_all_prices()
+            
+            # Find opportunities
+            opportunities = self.find_arbitrage_opportunities(all_prices)
+            self.opportunities = opportunities
+            self.last_scan_time = datetime.now()
+            
+            scan_time = time.time() - start_time
+            logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities.")
+            
+            return opportunities
+            
+        except Exception as e:
+            logger.error(f"Error in scan: {e}")
+            return []
     
     async def cleanup(self):
         """Clean up resources"""
@@ -286,7 +277,6 @@ class ArbitrageScanner:
 # Flask app setup
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
-socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global scanner instance
 scanner = ArbitrageScanner()
@@ -312,34 +302,31 @@ def get_opportunities():
             'timestamp': opp.timestamp.isoformat()
         })
     
-    return jsonify(opportunities_data)
+    return jsonify({
+        'opportunities': opportunities_data,
+        'last_scan_time': scanner.last_scan_time.isoformat() if scanner.last_scan_time else None,
+        'total_count': len(opportunities_data)
+    })
 
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected')
-    emit('connected', {'data': 'Connected to arbitrage scanner'})
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
-
-def run_scanner():
-    """Run the scanner in a separate thread"""
+@app.route('/api/scan')
+def trigger_scan():
+    """API endpoint to trigger a new scan"""
+    async def run_scan():
+        return await scanner.scan_once()
+    
+    # Run the scan in a new event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(scanner.start_scanning())
-
-# Start scanner in background thread
-scanner_thread = threading.Thread(target=run_scanner, daemon=True)
-scanner_thread.start()
+    try:
+        opportunities = loop.run_until_complete(run_scan())
+        return jsonify({
+            'status': 'success',
+            'opportunities_found': len(opportunities),
+            'scan_time': scanner.last_scan_time.isoformat() if scanner.last_scan_time else None
+        })
+    finally:
+        loop.close()
 
 if __name__ == '__main__':
-    try:
-        socketio.run(app, debug=True, port=5000)
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-        scanner.stop_scanning()
-        # Clean up
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(scanner.cleanup())
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
