@@ -251,7 +251,7 @@ class EnhancedArbitrageScanner:
         
     async def fetch_all_prices(self):
         """Fetch prices from all exchanges concurrently"""
-        logger.info("Starting to fetch prices from all exchanges...")
+        logger.info("🚀 NEW CODE DEPLOYED - SCANNING FOR OPPORTUNITIES 🚀")
         tasks = []
         for exchange_name, connector in self.exchanges.items():
             logger.info(f"Creating task for {exchange_name}")
