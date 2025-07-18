@@ -142,7 +142,13 @@ class BybitConnector(ExchangeConnector):
             url = f"{self.base_url}/v5/market/tickers"
             params = {"category": "spot"}
             
-            async with self.session.get(url) as response:
+            # Add headers to avoid rate limiting
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            async with self.session.get(url, params=params, headers=headers) as response:
+                logger.info(f"Bybit API response status: {response.status}")
                 if response.status == 200:
                     data = await response.json()
                     tickers = {}
@@ -153,7 +159,10 @@ class BybitConnector(ExchangeConnector):
                                 'price': float(item.get('lastPrice', 0)),
                                 'volume': float(item.get('volume24h', 0))
                             }
+                    logger.info(f"Bybit: Successfully fetched {len(tickers)} symbols")
                     return tickers
+                else:
+                    logger.error(f"Bybit API returned status {response.status}")
         except Exception as e:
             logger.error(f"Bybit API error: {e}")
         return {}
@@ -167,7 +176,14 @@ class KuCoinConnector(ExchangeConnector):
             await self.create_session()
             url = f"{self.base_url}/api/v1/market/allTickers"
             
-            async with self.session.get(url, params=params) as response:
+            # Add headers for better compatibility
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json'
+            }
+            
+            async with self.session.get(url, headers=headers) as response:
+                logger.info(f"KuCoin API response status: {response.status}")
                 if response.status == 200:
                     data = await response.json()
                     tickers = {}
@@ -178,9 +194,14 @@ class KuCoinConnector(ExchangeConnector):
                                 'price': float(item.get('last', 0)),
                                 'volume': float(item.get('vol', 0))
                             }
+                    logger.info(f"KuCoin: Successfully fetched {len(tickers)} symbols")
                     return tickers
+                else:
+                    logger.error(f"KuCoin API returned status {response.status}")
         except Exception as e:
             logger.error(f"KuCoin API error: {e}")
+            import traceback
+            logger.error(f"KuCoin traceback: {traceback.format_exc()}")
         return {}
 
 class GateConnector(ExchangeConnector):
