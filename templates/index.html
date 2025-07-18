@@ -59,10 +59,10 @@
             border: 2px solid #27ae60;
         }
 
-        .status.scanning {
-            background: rgba(255, 193, 7, 0.1);
-            color: #f39c12;
-            border: 2px solid #f39c12;
+        .status.disconnected {
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+            border: 2px solid #e74c3c;
         }
 
         .controls {
@@ -109,12 +109,6 @@
         button:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
         }
 
         .opportunities-container {
@@ -187,6 +181,11 @@
             font-weight: bold;
         }
 
+        .profit-suspicious {
+            color: #8e44ad;
+            font-weight: bold;
+        }
+
         .exchange-badge {
             background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
@@ -235,6 +234,14 @@
             font-size: 14px;
         }
 
+        .debug-info {
+            background: yellow;
+            padding: 10px;
+            margin: 10px;
+            font-family: monospace;
+            border-radius: 5px;
+        }
+
         @media (max-width: 768px) {
             .controls {
                 flex-direction: column;
@@ -253,54 +260,21 @@
     </style>
 </head>
 <body>
-
-<div id="debug-info" style="background: yellow; padding: 10px; margin: 10px; font-family: monospace;">
-    <h3>🔍 Debug Info:</h3>
-    <p>Page loaded: <span id="page-loaded">No</span></p>
-    <p>API called: <span id="api-called">No</span></p>
-    <p>Data received: <span id="data-received">No</span></p>
-    <p>Opportunities rendered: <span id="opportunities-rendered">No</span></p>
-    <button onclick="testAPI()" style="padding: 5px 10px;">🔄 Test API Now</button>
-</div>
-
-<script>
-// Debug script
-document.getElementById('page-loaded').textContent = 'Yes ✅';
-
-async function testAPI() {
-    try {
-        document.getElementById('api-called').textContent = 'Yes ✅';
-        console.log('🚀 Testing API...');
-        
-        const response = await fetch('/api/opportunities');
-        console.log('📡 Response:', response);
-        
-        const data = await response.json();
-        console.log('📊 Data:', data);
-        
-        document.getElementById('data-received').textContent = `Yes ✅ - ${data.length} items`;
-        
-        if (data.length > 0) {
-            console.log('🎯 First opportunity:', data[0]);
-        }
-        
-    } catch (error) {
-        document.getElementById('data-received').textContent = `❌ Error: ${error.message}`;
-        console.error('💥 API Error:', error);
-    }
-}
-
-// Test API on page load
-window.addEventListener('DOMContentLoaded', testAPI);
-</script>
-
-
-    
     <div class="container">
         <header>
             <h1>🚀 Crypto Arbitrage Scanner</h1>
-            <div id="status" class="status connected">Ready to scan for opportunities</div>
+            <div id="status" class="status connected">Scanning for opportunities...</div>
         </header>
+
+        <div id="debug-info" class="debug-info">
+            <h3>🔍 Debug Info:</h3>
+            <p>Page loaded: <span id="page-loaded">No</span></p>
+            <p>API called: <span id="api-called">No</span></p>
+            <p>Data received: <span id="data-received">No</span></p>
+            <p>Opportunities rendered: <span id="opportunities-rendered">No</span></p>
+            <button onclick="testAPI()" style="padding: 5px 10px;">🔄 Test API Now</button>
+            <button onclick="manualRefresh()" style="padding: 5px 10px;">🔄 Manual Refresh</button>
+        </div>
 
         <div class="controls">
             <div class="control-group">
@@ -313,11 +287,7 @@ window.addEventListener('DOMContentLoaded', testAPI);
             </div>
             <div class="control-group">
                 <label>&nbsp;</label>
-                <button id="scanButton" onclick="triggerScan()">🔍 Scan Now</button>
-            </div>
-            <div class="control-group">
-                <label>&nbsp;</label>
-                <button onclick="refreshOpportunities()">🔄 Refresh</button>
+                <button onclick="manualRefresh()">🔄 Refresh</button>
             </div>
         </div>
 
@@ -327,7 +297,7 @@ window.addEventListener('DOMContentLoaded', testAPI);
                 <div id="opportunitiesCount" class="opportunities-count">0 opportunities</div>
             </div>
 
-            <div id="loadingIndicator" class="loading" style="display: none;">
+            <div id="loadingIndicator" class="loading">
                 Scanning for arbitrage opportunities...
             </div>
 
@@ -351,7 +321,7 @@ window.addEventListener('DOMContentLoaded', testAPI);
 
             <div id="noOpportunities" class="no-opportunities" style="display: none;">
                 No profitable arbitrage opportunities found at the moment.
-                <br>Try lowering the minimum profit percentage or click "Scan Now" to get fresh data.
+                <br>Try lowering the minimum profit percentage.
             </div>
 
             <div id="lastUpdate" class="last-update"></div>
@@ -360,17 +330,40 @@ window.addEventListener('DOMContentLoaded', testAPI);
 
     <script>
         let opportunities = [];
-        let isScanning = false;
 
-        function updateStatus(status, message) {
-            const statusElement = document.getElementById('status');
-            statusElement.className = `status ${status}`;
-            statusElement.textContent = message;
+        // Debug script
+        document.getElementById('page-loaded').textContent = 'Yes ✅';
+
+        async function testAPI() {
+            try {
+                document.getElementById('api-called').textContent = 'Yes ✅';
+                console.log('🚀 Testing API...');
+                
+                const response = await fetch('/api/opportunities');
+                console.log('📡 Response:', response);
+                
+                const data = await response.json();
+                console.log('📊 Data:', data);
+                
+                document.getElementById('data-received').textContent = `Yes ✅ - ${data.length} items`;
+                
+                if (data.length > 0) {
+                    console.log('🎯 First opportunity:', data[0]);
+                }
+                
+                // Store data globally so we can test rendering
+                opportunities = data;
+                
+            } catch (error) {
+                document.getElementById('data-received').textContent = `❌ Error: ${error.message}`;
+                console.error('💥 API Error:', error);
+            }
         }
 
         function getProfitClass(profit) {
-            if (profit >= 5) return 'profit-very-high';
-            if (profit >= 2) return 'profit-high';
+            if (profit >= 50) return 'profit-suspicious';
+            if (profit >= 10) return 'profit-very-high';
+            if (profit >= 5) return 'profit-high';
             return 'profit-positive';
         }
 
@@ -392,12 +385,16 @@ window.addEventListener('DOMContentLoaded', testAPI);
         }
 
         function renderOpportunities() {
+            console.log('🎨 renderOpportunities called with', opportunities.length, 'opportunities');
+            
             const minProfit = parseFloat(document.getElementById('minProfit').value);
             const maxResults = parseInt(document.getElementById('maxResults').value);
             
             const filteredOpportunities = opportunities
                 .filter(opp => opp.profit_percentage >= minProfit)
                 .slice(0, maxResults);
+
+            console.log('🔍 Filtered to', filteredOpportunities.length, 'opportunities');
 
             const tableBody = document.getElementById('opportunitiesTableBody');
             const countElement = document.getElementById('opportunitiesCount');
@@ -411,6 +408,7 @@ window.addEventListener('DOMContentLoaded', testAPI);
                 contentElement.style.display = 'none';
                 noOpportunitiesElement.style.display = 'block';
                 countElement.textContent = '0 opportunities';
+                document.getElementById('opportunities-rendered').textContent = 'No - No data ❌';
                 return;
             }
 
@@ -420,7 +418,9 @@ window.addEventListener('DOMContentLoaded', testAPI);
 
             tableBody.innerHTML = '';
             
-            filteredOpportunities.forEach(opp => {
+            filteredOpportunities.forEach((opp, index) => {
+                console.log(`🏗️ Rendering opportunity ${index + 1}:`, opp.symbol);
+                
                 const row = document.createElement('tr');
                 const profitClass = getProfitClass(opp.profit_percentage);
                 
@@ -436,61 +436,25 @@ window.addEventListener('DOMContentLoaded', testAPI);
                 
                 tableBody.appendChild(row);
             });
+
+            // Update last update time
+            const lastUpdateElement = document.getElementById('lastUpdate');
+            lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            
+            document.getElementById('opportunities-rendered').textContent = `Yes ✅ - ${filteredOpportunities.length} shown`;
+            console.log('✅ Rendering complete!');
         }
 
-        async function triggerScan() {
-            if (isScanning) return;
-            
-            isScanning = true;
-            const scanButton = document.getElementById('scanButton');
-            scanButton.disabled = true;
-            scanButton.textContent = '🔍 Scanning...';
-            
-            updateStatus('scanning', 'Scanning exchanges for new opportunities...');
-            
-            const loadingElement = document.getElementById('loadingIndicator');
-            loadingElement.style.display = 'block';
-            
-            try {
-                const response = await fetch('/api/scan');
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    updateStatus('connected', `Found ${result.opportunities_found} opportunities`);
-                    await refreshOpportunities();
-                } else {
-                    updateStatus('connected', 'Scan completed');
-                }
-            } catch (error) {
-                console.error('Error triggering scan:', error);
-                updateStatus('connected', 'Error scanning - please try again');
-            } finally {
-                isScanning = false;
-                scanButton.disabled = false;
-                scanButton.textContent = '🔍 Scan Now';
-                loadingElement.style.display = 'none';
-            }
-        }
-
-        async function refreshOpportunities() {
+        async function manualRefresh() {
+            console.log('🔄 Manual refresh triggered');
             try {
                 const response = await fetch('/api/opportunities');
-                const data = await response.json();
-                opportunities = data.opportunities || [];
-                
+                opportunities = await response.json();
+                console.log('📥 Fetched', opportunities.length, 'opportunities');
                 renderOpportunities();
-                
-                // Update last update time
-                const lastUpdateElement = document.getElementById('lastUpdate');
-                if (data.last_scan_time) {
-                    const lastScan = new Date(data.last_scan_time);
-                    lastUpdateElement.textContent = `Last scan: ${lastScan.toLocaleTimeString()}`;
-                } else {
-                    lastUpdateElement.textContent = 'No data yet - click "Scan Now" to get started';
-                }
             } catch (error) {
-                console.error('Error fetching opportunities:', error);
-                updateStatus('connected', 'Error loading data');
+                console.error('❌ Manual refresh error:', error);
+                document.getElementById('opportunities-rendered').textContent = `Error: ${error.message} ❌`;
             }
         }
 
@@ -498,8 +462,16 @@ window.addEventListener('DOMContentLoaded', testAPI);
         document.getElementById('minProfit').addEventListener('input', renderOpportunities);
         document.getElementById('maxResults').addEventListener('input', renderOpportunities);
 
-        // Initial load
-        refreshOpportunities();
+        // Test API on page load and start auto-refresh
+        window.addEventListener('DOMContentLoaded', function() {
+            testAPI();
+            
+            // Auto-refresh every 15 seconds
+            setInterval(manualRefresh, 15000);
+            
+            // Initial data load
+            setTimeout(manualRefresh, 2000);
+        });
     </script>
 </body>
 </html>
