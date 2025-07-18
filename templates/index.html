@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Arbitrage Scanner</title>
+    <title>Enhanced Crypto Arbitrage Scanner</title>
     <style>
         * {
             margin: 0;
@@ -44,25 +44,37 @@
             background-clip: text;
         }
 
-        .status {
+        .subtitle {
             text-align: center;
-            padding: 10px;
-            border-radius: 10px;
+            color: #7f8c8d;
+            font-size: 1.1em;
             margin-bottom: 20px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            min-width: 120px;
+        }
+
+        .stat-number {
+            font-size: 1.8em;
             font-weight: bold;
-            transition: all 0.3s ease;
+            color: #2c3e50;
         }
 
-        .status.connected {
-            background: rgba(46, 204, 113, 0.1);
-            color: #27ae60;
-            border: 2px solid #27ae60;
-        }
-
-        .status.disconnected {
-            background: rgba(231, 76, 60, 0.1);
-            color: #e74c3c;
-            border: 2px solid #e74c3c;
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
         }
 
         .controls {
@@ -70,6 +82,7 @@
             justify-content: center;
             gap: 20px;
             margin-bottom: 30px;
+            flex-wrap: wrap;
         }
 
         .control-group {
@@ -166,8 +179,13 @@
             border-bottom: none;
         }
 
-        .profit-positive {
+        .profit-low {
             color: #27ae60;
+            font-weight: bold;
+        }
+
+        .profit-medium {
+            color: #f39c12;
             font-weight: bold;
         }
 
@@ -178,11 +196,6 @@
 
         .profit-very-high {
             color: #e74c3c;
-            font-weight: bold;
-        }
-
-        .profit-suspicious {
-            color: #8e44ad;
             font-weight: bold;
         }
 
@@ -200,6 +213,50 @@
         .symbol {
             font-weight: bold;
             color: #2c3e50;
+        }
+
+        .verification-badge {
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-left: 5px;
+        }
+
+        .verified {
+            background: #27ae60;
+            color: white;
+        }
+
+        .unverified {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .risk-low {
+            background: #27ae60;
+            color: white;
+        }
+
+        .risk-medium {
+            background: #f39c12;
+            color: white;
+        }
+
+        .risk-high {
+            background: #e67e22;
+            color: white;
+        }
+
+        .risk-very-high {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .market-cap {
+            font-size: 0.8em;
+            color: #7f8c8d;
         }
 
         .loading {
@@ -234,18 +291,30 @@
             font-size: 14px;
         }
 
-        .debug-info {
-            background: yellow;
-            padding: 10px;
-            margin: 10px;
-            font-family: monospace;
-            border-radius: 5px;
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9em;
         }
 
         @media (max-width: 768px) {
             .controls {
                 flex-direction: column;
                 align-items: center;
+            }
+            
+            .stats {
+                flex-direction: column;
+                gap: 10px;
             }
             
             .opportunities-table {
@@ -256,25 +325,35 @@
             .opportunities-table td {
                 padding: 8px;
             }
+            
+            .legend {
+                flex-direction: column;
+                gap: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🚀 Crypto Arbitrage Scanner</h1>
-            <div id="status" class="status connected">Scanning for opportunities...</div>
+            <h1>🛡️ Enhanced Crypto Arbitrage Scanner</h1>
+            <p class="subtitle">With Token Verification & Risk Assessment</p>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <div id="totalOpportunities" class="stat-number">0</div>
+                    <div class="stat-label">Total Opportunities</div>
+                </div>
+                <div class="stat-item">
+                    <div id="verifiedOpportunities" class="stat-number">0</div>
+                    <div class="stat-label">Verified Tokens</div>
+                </div>
+                <div class="stat-item">
+                    <div id="lowRiskOpportunities" class="stat-number">0</div>
+                    <div class="stat-label">Low Risk</div>
+                </div>
+            </div>
         </header>
-
-        <div id="debug-info" class="debug-info">
-            <h3>🔍 Debug Info:</h3>
-            <p>Page loaded: <span id="page-loaded">No</span></p>
-            <p>API called: <span id="api-called">No</span></p>
-            <p>Data received: <span id="data-received">No</span></p>
-            <p>Opportunities rendered: <span id="opportunities-rendered">No</span></p>
-            <button onclick="testAPI()" style="padding: 5px 10px;">🔄 Test API Now</button>
-            <button onclick="manualRefresh()" style="padding: 5px 10px;">🔄 Manual Refresh</button>
-        </div>
 
         <div class="controls">
             <div class="control-group">
@@ -286,8 +365,40 @@
                 <input type="number" id="maxResults" value="50" min="10" max="100" step="10">
             </div>
             <div class="control-group">
+                <label for="riskFilter">Risk Level:</label>
+                <select id="riskFilter">
+                    <option value="ALL">All Risk Levels</option>
+                    <option value="LOW">Low Risk Only</option>
+                    <option value="MEDIUM">Medium & Low</option>
+                    <option value="HIGH">High & Below</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="verifiedOnly">Verified Only:</label>
+                <input type="checkbox" id="verifiedOnly">
+            </div>
+            <div class="control-group">
                 <label>&nbsp;</label>
                 <button onclick="manualRefresh()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="verification-badge verified">Verified</span>
+                <span>Market cap > $1M</span>
+            </div>
+            <div class="legend-item">
+                <span class="verification-badge unverified">Unverified</span>
+                <span>Unknown or low market cap</span>
+            </div>
+            <div class="legend-item">
+                <span class="verification-badge risk-low">Low Risk</span>
+                <span>&lt; 5% profit, verified</span>
+            </div>
+            <div class="legend-item">
+                <span class="verification-badge risk-high">High Risk</span>
+                <span>&gt; 20% profit</span>
             </div>
         </div>
 
@@ -305,13 +416,14 @@
                 <table class="opportunities-table">
                     <thead>
                         <tr>
-                            <th>Symbol</th>
+                            <th>Token</th>
                             <th>Buy From</th>
                             <th>Buy Price</th>
                             <th>Sell To</th>
                             <th>Sell Price</th>
                             <th>Profit %</th>
-                            <th>Route</th>
+                            <th>Risk</th>
+                            <th>Market Cap</th>
                         </tr>
                     </thead>
                     <tbody id="opportunitiesTableBody">
@@ -320,8 +432,8 @@
             </div>
 
             <div id="noOpportunities" class="no-opportunities" style="display: none;">
-                No profitable arbitrage opportunities found at the moment.
-                <br>Try lowering the minimum profit percentage.
+                No profitable arbitrage opportunities found matching your filters.
+                <br>Try adjusting the minimum profit percentage or risk level.
             </div>
 
             <div id="lastUpdate" class="last-update"></div>
@@ -331,40 +443,15 @@
     <script>
         let opportunities = [];
 
-        // Debug script
-        document.getElementById('page-loaded').textContent = 'Yes ✅';
-
-        async function testAPI() {
-            try {
-                document.getElementById('api-called').textContent = 'Yes ✅';
-                console.log('🚀 Testing API...');
-                
-                const response = await fetch('/api/opportunities');
-                console.log('📡 Response:', response);
-                
-                const data = await response.json();
-                console.log('📊 Data:', data);
-                
-                document.getElementById('data-received').textContent = `Yes ✅ - ${data.length} items`;
-                
-                if (data.length > 0) {
-                    console.log('🎯 First opportunity:', data[0]);
-                }
-                
-                // Store data globally so we can test rendering
-                opportunities = data;
-                
-            } catch (error) {
-                document.getElementById('data-received').textContent = `❌ Error: ${error.message}`;
-                console.error('💥 API Error:', error);
-            }
-        }
-
         function getProfitClass(profit) {
-            if (profit >= 50) return 'profit-suspicious';
             if (profit >= 10) return 'profit-very-high';
             if (profit >= 5) return 'profit-high';
-            return 'profit-positive';
+            if (profit >= 2) return 'profit-medium';
+            return 'profit-low';
+        }
+
+        function getRiskClass(riskLevel) {
+            return `risk-${riskLevel.toLowerCase().replace('_', '-')}`;
         }
 
         function formatPrice(price) {
@@ -375,23 +462,57 @@
             }
         }
 
-        function formatVolume(volume) {
-            if (volume >= 1000000) {
-                return (volume / 1000000).toFixed(1) + 'M';
-            } else if (volume >= 1000) {
-                return (volume / 1000).toFixed(1) + 'K';
+        function formatMarketCap(marketCap) {
+            if (marketCap >= 1000000000) {
+                return ' + (marketCap / 1000000000).toFixed(1) + 'B';
+            } else if (marketCap >= 1000000) {
+                return ' + (marketCap / 1000000).toFixed(1) + 'M';
+            } else if (marketCap >= 1000) {
+                return ' + (marketCap / 1000).toFixed(1) + 'K';
+            } else if (marketCap > 0) {
+                return ' + marketCap.toFixed(0);
             }
-            return volume.toFixed(0);
+            return 'Unknown';
+        }
+
+        function updateStats() {
+            const total = opportunities.length;
+            const verified = opportunities.filter(opp => opp.token_verified).length;
+            const lowRisk = opportunities.filter(opp => opp.risk_level === 'LOW').length;
+
+            document.getElementById('totalOpportunities').textContent = total;
+            document.getElementById('verifiedOpportunities').textContent = verified;
+            document.getElementById('lowRiskOpportunities').textContent = lowRisk;
+        }
+
+        function shouldShowOpportunity(opp) {
+            const minProfit = parseFloat(document.getElementById('minProfit').value);
+            const riskFilter = document.getElementById('riskFilter').value;
+            const verifiedOnly = document.getElementById('verifiedOnly').checked;
+
+            // Profit filter
+            if (opp.profit_percentage < minProfit) return false;
+
+            // Verification filter
+            if (verifiedOnly && !opp.token_verified) return false;
+
+            // Risk filter
+            const riskLevels = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+            const maxRiskIndex = riskLevels.indexOf(riskFilter);
+            const oppRiskIndex = riskLevels.indexOf(opp.risk_level);
+
+            if (riskFilter !== 'ALL' && oppRiskIndex > maxRiskIndex) return false;
+
+            return true;
         }
 
         function renderOpportunities() {
             console.log('🎨 renderOpportunities called with', opportunities.length, 'opportunities');
             
-            const minProfit = parseFloat(document.getElementById('minProfit').value);
             const maxResults = parseInt(document.getElementById('maxResults').value);
             
             const filteredOpportunities = opportunities
-                .filter(opp => opp.profit_percentage >= minProfit)
+                .filter(shouldShowOpportunity)
                 .slice(0, maxResults);
 
             console.log('🔍 Filtered to', filteredOpportunities.length, 'opportunities');
@@ -408,7 +529,6 @@
                 contentElement.style.display = 'none';
                 noOpportunitiesElement.style.display = 'block';
                 countElement.textContent = '0 opportunities';
-                document.getElementById('opportunities-rendered').textContent = 'No - No data ❌';
                 return;
             }
 
@@ -423,15 +543,26 @@
                 
                 const row = document.createElement('tr');
                 const profitClass = getProfitClass(opp.profit_percentage);
+                const riskClass = getRiskClass(opp.risk_level);
                 
                 row.innerHTML = `
-                    <td class="symbol">${opp.symbol}</td>
+                    <td>
+                        <span class="symbol">${opp.symbol}</span>
+                        <span class="verification-badge ${opp.token_verified ? 'verified' : 'unverified'}">
+                            ${opp.token_verified ? 'Verified' : 'Unverified'}
+                        </span>
+                    </td>
                     <td><span class="exchange-badge">${opp.buy_exchange}</span></td>
-                    <td>$${formatPrice(opp.buy_price)}</td>
+                    <td>${formatPrice(opp.buy_price)}</td>
                     <td><span class="exchange-badge">${opp.sell_exchange}</span></td>
-                    <td>$${formatPrice(opp.sell_price)}</td>
+                    <td>${formatPrice(opp.sell_price)}</td>
                     <td class="${profitClass}">${opp.profit_percentage.toFixed(2)}%</td>
-                    <td>${opp.buy_exchange} → ${opp.sell_exchange}</td>
+                    <td>
+                        <span class="verification-badge ${riskClass}">
+                            ${opp.risk_level.replace('_', ' ')}
+                        </span>
+                    </td>
+                    <td class="market-cap">${formatMarketCap(opp.market_cap || 0)}</td>
                 `;
                 
                 tableBody.appendChild(row);
@@ -441,7 +572,9 @@
             const lastUpdateElement = document.getElementById('lastUpdate');
             lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
             
-            document.getElementById('opportunities-rendered').textContent = `Yes ✅ - ${filteredOpportunities.length} shown`;
+            // Update stats
+            updateStats();
+            
             console.log('✅ Rendering complete!');
         }
 
@@ -454,23 +587,22 @@
                 renderOpportunities();
             } catch (error) {
                 console.error('❌ Manual refresh error:', error);
-                document.getElementById('opportunities-rendered').textContent = `Error: ${error.message} ❌`;
             }
         }
 
         // Event listeners
         document.getElementById('minProfit').addEventListener('input', renderOpportunities);
         document.getElementById('maxResults').addEventListener('input', renderOpportunities);
+        document.getElementById('riskFilter').addEventListener('change', renderOpportunities);
+        document.getElementById('verifiedOnly').addEventListener('change', renderOpportunities);
 
-        // Test API on page load and start auto-refresh
+        // Auto-refresh and initial load
         window.addEventListener('DOMContentLoaded', function() {
-            testAPI();
-            
             // Auto-refresh every 15 seconds
             setInterval(manualRefresh, 15000);
             
             // Initial data load
-            setTimeout(manualRefresh, 2000);
+            setTimeout(manualRefresh, 1000);
         });
     </script>
 </body>
