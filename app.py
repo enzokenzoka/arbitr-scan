@@ -17,6 +17,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @dataclass
+class TokenInfo:
+    symbol: str
+    name: str
+    contract_address: str
+    blockchain: str
+    coingecko_id: str
+    market_cap: float
+    verified: bool
+
+@dataclass
 class ArbitrageOpportunity:
     buy_exchange: str
     sell_exchange: str
@@ -27,6 +37,85 @@ class ArbitrageOpportunity:
     buy_volume: float
     sell_volume: float
     timestamp: datetime
+    token_verified: bool
+    market_cap: float
+    risk_level: str
+
+class TokenVerificationService:
+    def __init__(self):
+        self.token_cache = {}
+        self.last_cache_update = 0
+        self.cache_duration = 3600  # 1 hour
+        
+    async def get_token_info(self, symbol: str) -> Optional[TokenInfo]:
+        """Get token information from CoinGecko"""
+        try:
+            # Check cache first
+            if symbol in self.token_cache:
+                return self.token_cache[symbol]
+            
+            # Fetch from CoinGecko API
+            url = "https://api.coingecko.com/api/v3/coins/markets"
+            params = {
+                "vs_currency": "usd",
+                "ids": "",  # We'll search by symbol
+                "order": "market_cap_desc",
+                "per_page": 250,
+                "page": 1,
+                "sparkline": False
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Find matching symbol
+                        for coin in data:
+                            if coin.get('symbol', '').upper() == symbol.upper():
+                                token_info = TokenInfo(
+                                    symbol=symbol,
+                                    name=coin.get('name', ''),
+                                    contract_address=coin.get('id', ''),  # Using CoinGecko ID as identifier
+                                    blockchain='ethereum',  # Default assumption
+                                    coingecko_id=coin.get('id', ''),
+                                    market_cap=coin.get('market_cap', 0) or 0,
+                                    verified=coin.get('market_cap', 0) > 1000000  # Verified if >$1M market cap
+                                )
+                                self.token_cache[symbol] = token_info
+                                return token_info
+        except Exception as e:
+            logger.error(f"Error fetching token info for {symbol}: {e}")
+            
+        # Return default if not found
+        return TokenInfo(
+            symbol=symbol,
+            name="Unknown",
+            contract_address="",
+            blockchain="unknown",
+            coingecko_id="",
+            market_cap=0,
+            verified=False
+        )
+    
+    def is_legitimate_token(self, token_info: TokenInfo) -> bool:
+        """Check if token appears to be legitimate"""
+        return (
+            token_info.verified and
+            token_info.market_cap > 1000000 and  # > $1M market cap
+            token_info.coingecko_id != ""
+        )
+    
+    def calculate_risk_level(self, token_info: TokenInfo, profit_percentage: float) -> str:
+        """Calculate risk level based on token info and profit"""
+        if not token_info.verified or token_info.market_cap < 100000:
+            return "VERY_HIGH"
+        elif profit_percentage > 20:
+            return "HIGH"
+        elif profit_percentage > 5:
+            return "MEDIUM"
+        else:
+            return "LOW"
 
 class ExchangeConnector:
     def __init__(self, name: str, base_url: str):
@@ -56,7 +145,7 @@ class BybitConnector(ExchangeConnector):
             url = f"{self.base_url}/v5/market/tickers"
             params = {"category": "spot"}
             
-            async with self.session.get(url, params=params) as response:
+            async with self.session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
                     tickers = {}
@@ -81,7 +170,7 @@ class KuCoinConnector(ExchangeConnector):
             await self.create_session()
             url = f"{self.base_url}/api/v1/market/allTickers"
             
-            async with self.session.get(url) as response:
+            async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
                     tickers = {}
@@ -149,7 +238,7 @@ class HTXConnector(ExchangeConnector):
             logger.error(f"HTX API error: {e}")
         return {}
 
-class ArbitrageScanner:
+class EnhancedArbitrageScanner:
     def __init__(self):
         self.exchanges = {
             'bybit': BybitConnector(),
@@ -159,8 +248,9 @@ class ArbitrageScanner:
         }
         self.opportunities = []
         self.running = False
-        self.min_profit_percentage = 0.5  # Minimum 0.5% profit
+        self.min_profit_percentage = 0.5
         self.top_n_tokens = 300
+        self.token_service = TokenVerificationService()
         
     async def fetch_all_prices(self):
         """Fetch prices from all exchanges concurrently"""
@@ -186,8 +276,8 @@ class ArbitrageScanner:
         logger.info(f"Total symbols fetched across all exchanges: {total_symbols}")
         return results
     
-    def find_arbitrage_opportunities(self, all_prices: Dict[str, Dict]) -> List[ArbitrageOpportunity]:
-        """Find arbitrage opportunities between exchanges"""
+    async def find_arbitrage_opportunities(self, all_prices: Dict[str, Dict]) -> List[ArbitrageOpportunity]:
+        """Find arbitrage opportunities between exchanges with token verification"""
         opportunities = []
         
         # Get all unique symbols across exchanges
@@ -209,9 +299,17 @@ class ArbitrageScanner:
                            key=lambda x: symbol_volumes[x], 
                            reverse=True)[:self.top_n_tokens]
         
+        logger.info(f"Analyzing {len(top_symbols)} top symbols for arbitrage...")
+        
         for symbol in top_symbols:
             symbol_prices = {}
             symbol_volumes = {}
+            
+            # Extract base symbol (remove /USDT)
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+            
+            # Get token information
+            token_info = await self.token_service.get_token_info(base_symbol)
             
             # Collect prices and volumes for this symbol across exchanges
             for exchange_name, exchange_prices in all_prices.items():
@@ -234,28 +332,45 @@ class ArbitrageScanner:
             if buy_price > 0:
                 profit_percentage = ((sell_price - buy_price) / buy_price) * 100
                 
-                # SAFETY FILTERS - Prevent false opportunities
-                # Filter 1: Reject if profit is unrealistically high (likely different tokens)
-                if profit_percentage > 100:  # More than 100% is suspicious
+                # ENHANCED SAFETY FILTERS
+                
+                # Filter 1: Token legitimacy check
+                if not self.token_service.is_legitimate_token(token_info):
+                    if profit_percentage > 5:  # Skip unverified tokens with high profits
+                        logger.debug(f"Skipping {symbol}: Unverified token with {profit_percentage:.2f}% profit")
+                        continue
+                
+                # Filter 2: Profit reasonableness based on market cap
+                max_reasonable_profit = 50 if token_info.market_cap < 10000000 else 20  # Small cap vs large cap
+                if profit_percentage > max_reasonable_profit:
+                    logger.debug(f"Skipping {symbol}: Unreasonable profit {profit_percentage:.2f}%")
                     continue
-                    
-                # Filter 2: Reject if price difference is too extreme
+                
+                # Filter 3: Price ratio check
                 price_ratio = sell_price / buy_price if buy_price > 0 else float('inf')
-                if price_ratio > 2.0:  # If one price is more than 2x the other, skip
+                if price_ratio > 1.5:  # More conservative than before
+                    logger.debug(f"Skipping {symbol}: Price ratio too high {price_ratio:.2f}")
                     continue
-                    
-                # Filter 3: Require minimum volume on both exchanges
-                min_volume_required = 1000  # Minimum $1000 volume
+                
+                # Filter 4: Minimum volume requirements (higher for unverified tokens)
+                min_volume_required = 10000 if token_info.verified else 50000
                 if (symbol_volumes.get(buy_exchange, 0) < min_volume_required or 
                     symbol_volumes.get(sell_exchange, 0) < min_volume_required):
                     continue
                 
-                # Filter 4: Reject if prices are suspiciously low (might be dead tokens)
-                if buy_price < 0.000001 or sell_price < 0.000001:  # Less than $0.000001
+                # Filter 5: Minimum price floor (avoid dust tokens)
+                if buy_price < 0.00001 or sell_price < 0.00001:
+                    continue
+                
+                # Filter 6: Market cap requirement for high profits
+                if profit_percentage > 10 and token_info.market_cap < 1000000:
+                    logger.debug(f"Skipping {symbol}: High profit on low market cap token")
                     continue
                 
                 # Only consider if profit is above threshold and passes all filters
                 if profit_percentage >= self.min_profit_percentage:
+                    risk_level = self.token_service.calculate_risk_level(token_info, profit_percentage)
+                    
                     opportunity = ArbitrageOpportunity(
                         buy_exchange=buy_exchange.title(),
                         sell_exchange=sell_exchange.title(),
@@ -265,12 +380,15 @@ class ArbitrageScanner:
                         profit_percentage=profit_percentage,
                         buy_volume=symbol_volumes.get(buy_exchange, 0),
                         sell_volume=symbol_volumes.get(sell_exchange, 0),
-                        timestamp=datetime.now()
+                        timestamp=datetime.now(),
+                        token_verified=token_info.verified,
+                        market_cap=token_info.market_cap,
+                        risk_level=risk_level
                     )
                     opportunities.append(opportunity)
         
-        # Sort by profit percentage (descending)
-        opportunities.sort(key=lambda x: x.profit_percentage, reverse=True)
+        # Sort by profit percentage (descending) but prioritize verified tokens
+        opportunities.sort(key=lambda x: (x.token_verified, x.profit_percentage), reverse=True)
         return opportunities[:50]  # Return top 50 opportunities
     
     async def scan_once(self):
@@ -282,12 +400,13 @@ class ArbitrageScanner:
             # Fetch all prices
             all_prices = await self.fetch_all_prices()
             
-            # Find opportunities
-            opportunities = self.find_arbitrage_opportunities(all_prices)
+            # Find opportunities with verification
+            opportunities = await self.find_arbitrage_opportunities(all_prices)
             self.opportunities = opportunities
             
             scan_time = time.time() - start_time
-            logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities.")
+            verified_count = sum(1 for opp in opportunities if opp.token_verified)
+            logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities ({verified_count} verified)")
             
         except Exception as e:
             logger.error(f"Error in scan: {e}")
@@ -324,7 +443,7 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Global scanner instance
-scanner = ArbitrageScanner()
+scanner = EnhancedArbitrageScanner()
 
 @app.route('/')
 def index():
@@ -348,7 +467,10 @@ def get_opportunities():
                 'profit_percentage': round(opp.profit_percentage, 2),
                 'buy_volume': opp.buy_volume,
                 'sell_volume': opp.sell_volume,
-                'timestamp': opp.timestamp.isoformat()
+                'timestamp': opp.timestamp.isoformat(),
+                'token_verified': opp.token_verified,
+                'market_cap': opp.market_cap,
+                'risk_level': opp.risk_level
             })
         
         logger.info(f"API: Returning {len(opportunities_data)} opportunities")
