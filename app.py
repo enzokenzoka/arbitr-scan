@@ -319,21 +319,48 @@ def index():
 @app.route('/api/opportunities')
 def get_opportunities():
     """API endpoint to get current arbitrage opportunities"""
-    opportunities_data = []
-    for opp in scanner.opportunities:
-        opportunities_data.append({
-            'buy_exchange': opp.buy_exchange,
-            'sell_exchange': opp.sell_exchange,
-            'symbol': opp.symbol,
-            'buy_price': opp.buy_price,
-            'sell_price': opp.sell_price,
-            'profit_percentage': round(opp.profit_percentage, 2),
-            'buy_volume': opp.buy_volume,
-            'sell_volume': opp.sell_volume,
-            'timestamp': opp.timestamp.isoformat()
-        })
-    
-    return jsonify(opportunities_data)
+    try:
+        logger.info("=== API ENDPOINT CALLED ===")
+        
+        # Create a new event loop for this request
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Run a fresh scan
+            loop.run_until_complete(scanner.scan_once())
+        finally:
+            loop.close()
+        
+        logger.info(f"API: Found {len(scanner.opportunities)} opportunities")
+        
+        opportunities_data = []
+        for opp in scanner.opportunities:
+            opportunities_data.append({
+                'buy_exchange': opp.buy_exchange,
+                'sell_exchange': opp.sell_exchange,
+                'symbol': opp.symbol,
+                'buy_price': opp.buy_price,
+                'sell_price': opp.sell_price,
+                'profit_percentage': round(opp.profit_percentage, 2),
+                'buy_volume': opp.buy_volume,
+                'sell_volume': opp.sell_volume,
+                'timestamp': opp.timestamp.isoformat()
+            })
+        
+        logger.info(f"API: Returning {len(opportunities_data)} opportunities")
+        return jsonify(opportunities_data)
+        
+    except Exception as e:
+        logger.error(f"API ERROR: {e}")
+        import traceback
+        logger.error(f"API TRACEBACK: {traceback.format_exc()}")
+        
+        # Return a proper JSON error instead of HTML
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to fetch arbitrage opportunities"
+        }), 500
 
 @socketio.on('connect')
 def handle_connect():
