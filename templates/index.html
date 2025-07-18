@@ -447,203 +447,189 @@
     </div>
 
     <script>
-        let opportunities = [];
+    let opportunities = [];
 
-        function getProfitClass(profit) {
-            if (profit >= 10) return 'profit-very-high';
-            if (profit >= 5) return 'profit-high';
-            if (profit >= 2) return 'profit-medium';
-            return 'profit-low';
+    function getProfitClass(profit) {
+        if (profit >= 10) return 'profit-very-high';
+        if (profit >= 5) return 'profit-high';
+        if (profit >= 2) return 'profit-medium';
+        return 'profit-low';
+    }
+
+    function getRiskClass(riskLevel) {
+        return `risk-${riskLevel.toLowerCase().replace('_', '-')}`;
+    }
+
+    function formatPrice(price) {
+        if (price >= 1) {
+            return price.toFixed(4);
+        } else {
+            return price.toFixed(8);
+        }
+    }
+
+    function formatMarketCap(marketCap) {
+        if (marketCap >= 1000000000) {
+            return '$' + (marketCap / 1000000000).toFixed(1) + 'B';
+        } else if (marketCap >= 1000000) {
+            return '$' + (marketCap / 1000000).toFixed(1) + 'M';
+        } else if (marketCap >= 1000) {
+            return '$' + (marketCap / 1000).toFixed(1) + 'K';
+        } else if (marketCap > 0) {
+            return '$' + marketCap.toFixed(0);
+        }
+        return 'Unknown';
+    }
+
+    function updateStats() {
+        const total = opportunities.length;
+        const verified = opportunities.filter(opp => opp.token_verified).length;
+        const lowRisk = opportunities.filter(opp => opp.risk_level === 'LOW').length;
+
+        document.getElementById('totalOpportunities').textContent = total;
+        document.getElementById('verifiedOpportunities').textContent = verified;
+        document.getElementById('lowRiskOpportunities').textContent = lowRisk;
+    }
+
+    function shouldShowOpportunity(opp) {
+        const minProfit = parseFloat(document.getElementById('minProfit').value);
+        const riskFilter = document.getElementById('riskFilter').value;
+        const verifiedOnly = document.getElementById('verifiedOnly').checked;
+
+        // Profit filter
+        if (opp.profit_percentage < minProfit) return false;
+
+        // Verification filter
+        if (verifiedOnly && !opp.token_verified) return false;
+
+        // Risk filter
+        const riskLevels = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+        const maxRiskIndex = riskLevels.indexOf(riskFilter);
+        const oppRiskIndex = riskLevels.indexOf(opp.risk_level);
+
+        if (riskFilter !== 'ALL' && oppRiskIndex > maxRiskIndex) return false;
+
+        return true;
+    }
+
+    function renderOpportunities() {
+        console.log('🎨 renderOpportunities called with', opportunities.length, 'opportunities');
+        
+        const maxResults = parseInt(document.getElementById('maxResults').value);
+        
+        const filteredOpportunities = opportunities
+            .filter(shouldShowOpportunity)
+            .slice(0, maxResults);
+
+        console.log('🔍 Filtered to', filteredOpportunities.length, 'opportunities');
+
+        const tableBody = document.getElementById('opportunitiesTableBody');
+        const countElement = document.getElementById('opportunitiesCount');
+        const loadingElement = document.getElementById('loadingIndicator');
+        const contentElement = document.getElementById('opportunitiesContent');
+        const noOpportunitiesElement = document.getElementById('noOpportunities');
+
+        loadingElement.style.display = 'none';
+        
+        if (filteredOpportunities.length === 0) {
+            contentElement.style.display = 'none';
+            noOpportunitiesElement.style.display = 'block';
+            countElement.textContent = '0 opportunities';
+            return;
         }
 
-        function getRiskClass(riskLevel) {
-            return `risk-${riskLevel.toLowerCase().replace('_', '-')}`;
-        }
+        noOpportunitiesElement.style.display = 'none';
+        contentElement.style.display = 'block';
+        countElement.textContent = `${filteredOpportunities.length} opportunities`;
 
-        function formatPrice(price) {
-            if (price >= 1) {
-                return price.toFixed(4);
-            } else {
-                return price.toFixed(8);
-            }
-        }
-
-        function formatMarketCap(marketCap) {
-            if (marketCap >= 1000000000) {
-                return ' + (marketCap / 1000000000).toFixed(1) + 'B';
-            } else if (marketCap >= 1000000) {
-                return ' + (marketCap / 1000000).toFixed(1) + 'M';
-            } else if (marketCap >= 1000) {
-                return ' + (marketCap / 1000).toFixed(1) + 'K';
-            } else if (marketCap > 0) {
-                return ' + marketCap.toFixed(0);
-            }
-            return 'Unknown';
-        }
-
-        function updateStats() {
-            const total = opportunities.length;
-            const verified = opportunities.filter(opp => opp.token_verified).length;
-            const lowRisk = opportunities.filter(opp => opp.risk_level === 'LOW').length;
-
-            document.getElementById('totalOpportunities').textContent = total;
-            document.getElementById('verifiedOpportunities').textContent = verified;
-            document.getElementById('lowRiskOpportunities').textContent = lowRisk;
-        }
-
-        function shouldShowOpportunity(opp) {
-            const minProfit = parseFloat(document.getElementById('minProfit').value);
-            const riskFilter = document.getElementById('riskFilter').value;
-            const verifiedOnly = document.getElementById('verifiedOnly').checked;
-
-            // Profit filter
-            if (opp.profit_percentage < minProfit) return false;
-
-            // Verification filter
-            if (verifiedOnly && !opp.token_verified) return false;
-
-            // Risk filter
-            const riskLevels = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
-            const maxRiskIndex = riskLevels.indexOf(riskFilter);
-            const oppRiskIndex = riskLevels.indexOf(opp.risk_level);
-
-            if (riskFilter !== 'ALL' && oppRiskIndex > maxRiskIndex) return false;
-
-            return true;
-        }
-
-        function renderOpportunities() {
-            console.log('🎨 renderOpportunities called with', opportunities.length, 'opportunities');
+        tableBody.innerHTML = '';
+        
+        filteredOpportunities.forEach((opp, index) => {
+            console.log(`🏗️ Rendering opportunity ${index + 1}:`, opp.symbol);
             
-            const maxResults = parseInt(document.getElementById('maxResults').value);
+            const row = document.createElement('tr');
+            const profitClass = getProfitClass(opp.profit_percentage);
+            const riskClass = getRiskClass(opp.risk_level);
             
-            const filteredOpportunities = opportunities
-                .filter(shouldShowOpportunity)
-                .slice(0, maxResults);
-
-            console.log('🔍 Filtered to', filteredOpportunities.length, 'opportunities');
-
-            const tableBody = document.getElementById('opportunitiesTableBody');
-            const countElement = document.getElementById('opportunitiesCount');
-            const loadingElement = document.getElementById('loadingIndicator');
-            const contentElement = document.getElementById('opportunitiesContent');
-            const noOpportunitiesElement = document.getElementById('noOpportunities');
-
-            loadingElement.style.display = 'none';
+            row.innerHTML = `
+                <td>
+                    <span class="symbol">${opp.symbol}</span>
+                    <span class="verification-badge ${opp.token_verified ? 'verified' : 'unverified'}">
+                        ${opp.token_verified ? 'Verified' : 'Unverified'}
+                    </span>
+                </td>
+                <td><span class="exchange-badge">${opp.buy_exchange}</span></td>
+                <td>$${formatPrice(opp.buy_price)}</td>
+                <td><span class="exchange-badge">${opp.sell_exchange}</span></td>
+                <td>$${formatPrice(opp.sell_price)}</td>
+                <td class="${profitClass}">${opp.profit_percentage.toFixed(2)}%</td>
+                <td>
+                    <span class="verification-badge ${riskClass}">
+                        ${opp.risk_level.replace('_', ' ')}
+                    </span>
+                </td>
+                <td class="market-cap">${formatMarketCap(opp.market_cap || 0)}</td>
+            `;
             
-            if (filteredOpportunities.length === 0) {
-                contentElement.style.display = 'none';
-                noOpportunitiesElement.style.display = 'block';
-                countElement.textContent = '0 opportunities';
-                return;
-            }
-
-            noOpportunitiesElement.style.display = 'none';
-            contentElement.style.display = 'block';
-            countElement.textContent = `${filteredOpportunities.length} opportunities`;
-
-            tableBody.innerHTML = '';
-            
-            filteredOpportunities.forEach((opp, index) => {
-                console.log(`🏗️ Rendering opportunity ${index + 1}:`, opp.symbol);
-                
-                const row = document.createElement('tr');
-                const profitClass = getProfitClass(opp.profit_percentage);
-                const riskClass = getRiskClass(opp.risk_level);
-                
-                row.innerHTML = `
-                    <td>
-                        <span class="symbol">${opp.symbol}</span>
-                        <span class="verification-badge ${opp.token_verified ? 'verified' : 'unverified'}">
-                            ${opp.token_verified ? 'Verified' : 'Unverified'}
-                        </span>
-                    </td>
-                    <td><span class="exchange-badge">${opp.buy_exchange}</span></td>
-                    <td>${formatPrice(opp.buy_price)}</td>
-                    <td><span class="exchange-badge">${opp.sell_exchange}</span></td>
-                    <td>${formatPrice(opp.sell_price)}</td>
-                    <td class="${profitClass}">${opp.profit_percentage.toFixed(2)}%</td>
-                    <td>
-                        <span class="verification-badge ${riskClass}">
-                            ${opp.risk_level.replace('_', ' ')}
-                        </span>
-                    </td>
-                    <td class="market-cap">${formatMarketCap(opp.market_cap || 0)}</td>
-                `;
-                
-                tableBody.appendChild(row);
-            });
-
-            // Update last update time
-            const lastUpdateElement = document.getElementById('lastUpdate');
-            lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-            
-            // Update stats
-            updateStats();
-            
-            console.log('✅ Rendering complete!');
-        }
-
-        async function manualRefresh() {
-            console.log('🔄 Manual refresh triggered');
-            try {
-                const response = await fetch('/api/opportunities');
-                opportunities = await response.json();
-                console.log('📥 Fetched', opportunities.length, 'opportunities');
-                renderOpportunities();
-            } catch (error) {
-                console.error('❌ Manual refresh error:', error);
-            }
-        }
-
-        // Event listeners
-        document.getElementById('minProfit').addEventListener('input', renderOpportunities);
-        document.getElementById('maxResults').addEventListener('input', renderOpportunities);
-        document.getElementById('riskFilter').addEventListener('change', renderOpportunities);
-        document.getElementById('verifiedOnly').addEventListener('change', renderOpportunities);
-
-        // Auto-refresh and initial load
-        window.addEventListener('DOMContentLoaded', function() {
-            // Auto-refresh every 15 seconds
-            setInterval(manualRefresh, 15000);
-            
-            // Initial data load
-            setTimeout(manualRefresh, 1000);
+            tableBody.appendChild(row);
         });
 
-        //Debug
-        async function debugTest() {
-    console.log('🔍 Debug test started');
-    
-    try {
-        // Test API call
-        const response = await fetch('/api/opportunities');
-        console.log('📡 Response status:', response.status);
+        // Update last update time
+        const lastUpdateElement = document.getElementById('lastUpdate');
+        lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
         
-        const data = await response.json();
-        console.log('📊 Raw data from API:', data);
-        console.log('📊 Data length:', data.length);
+        // Update stats
+        updateStats();
         
-        if (data.length > 0) {
-            console.log('📊 First opportunity:', data[0]);
+        console.log('✅ Rendering complete!');
+    }
+
+    async function manualRefresh() {
+        console.log('🔄 Manual refresh triggered');
+        try {
+            const response = await fetch('/api/opportunities');
+            opportunities = await response.json();
+            console.log('📥 Fetched', opportunities.length, 'opportunities');
+            renderOpportunities();
+        } catch (error) {
+            console.error('❌ Manual refresh error:', error);
         }
+    }
+
+    // Debug function
+    async function debugTest() {
+        console.log('🔍 Debug test started');
         
-        // Test if rendering function exists
-        if (typeof renderOpportunities === 'function') {
-            console.log('✅ renderOpportunities function exists');
+        try {
+            const response = await fetch('/api/opportunities');
+            const data = await response.json();
+            console.log('📊 Debug: Got', data.length, 'opportunities');
+            
             opportunities = data;
             renderOpportunities();
-        } else {
-            console.log('❌ renderOpportunities function missing');
-        }
-        
+            console.log('✅ Debug: Rendered successfully');
+            
         } catch (error) {
             console.log('❌ Debug test error:', error);
         }
     }
 
+    // Event listeners
+    document.getElementById('minProfit').addEventListener('input', renderOpportunities);
+    document.getElementById('maxResults').addEventListener('input', renderOpportunities);
+    document.getElementById('riskFilter').addEventListener('change', renderOpportunities);
+    document.getElementById('verifiedOnly').addEventListener('change', renderOpportunities);
 
+    // Auto-refresh and initial load
+    window.addEventListener('DOMContentLoaded', function() {
+        console.log('📱 Page loaded, starting auto-refresh');
         
-    </script>
+        // Auto-refresh every 15 seconds
+        setInterval(manualRefresh, 15000);
+        
+        // Initial data load
+        setTimeout(manualRefresh, 1000);
+    });
+</script>
 </body>
 </html>
