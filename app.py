@@ -164,19 +164,26 @@ class ArbitrageScanner:
         
     async def fetch_all_prices(self):
         """Fetch prices from all exchanges concurrently"""
+        logger.info("Starting to fetch prices from all exchanges...")
         tasks = []
         for exchange_name, connector in self.exchanges.items():
+            logger.info(f"Creating task for {exchange_name}")
             task = asyncio.create_task(connector.get_tickers())
             tasks.append((exchange_name, task))
         
         results = {}
         for exchange_name, task in tasks:
             try:
-                results[exchange_name] = await task
+                logger.info(f"Waiting for {exchange_name} data...")
+                exchange_data = await task
+                results[exchange_name] = exchange_data
+                logger.info(f"{exchange_name}: Got {len(exchange_data)} symbols")
             except Exception as e:
                 logger.error(f"Error fetching {exchange_name}: {e}")
                 results[exchange_name] = {}
         
+        total_symbols = sum(len(data) for data in results.values())
+        logger.info(f"Total symbols fetched across all exchanges: {total_symbols}")
         return results
     
     def find_arbitrage_opportunities(self, all_prices: Dict[str, Dict]) -> List[ArbitrageOpportunity]:
@@ -266,23 +273,30 @@ class ArbitrageScanner:
         opportunities.sort(key=lambda x: x.profit_percentage, reverse=True)
         return opportunities[:50]  # Return top 50 opportunities
     
+    async def scan_once(self):
+        """Scan for arbitrage opportunities once"""
+        try:
+            logger.info("Scanning for arbitrage opportunities...")
+            start_time = time.time()
+            
+            # Fetch all prices
+            all_prices = await self.fetch_all_prices()
+            
+            # Find opportunities
+            opportunities = self.find_arbitrage_opportunities(all_prices)
+            self.opportunities = opportunities
+            
+            scan_time = time.time() - start_time
+            logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities.")
+            
+        except Exception as e:
+            logger.error(f"Error in scan: {e}")
+    
     async def scan_continuously(self):
         """Continuously scan for arbitrage opportunities"""
         while self.running:
             try:
-                logger.info("Scanning for arbitrage opportunities...")
-                start_time = time.time()
-                
-                # Fetch all prices
-                all_prices = await self.fetch_all_prices()
-                
-                # Find opportunities
-                opportunities = self.find_arbitrage_opportunities(all_prices)
-                self.opportunities = opportunities
-                
-                scan_time = time.time() - start_time
-                logger.info(f"Scan completed in {scan_time:.2f}s. Found {len(opportunities)} opportunities.")
-                
+                await self.scan_once()
                 # Wait before next scan
                 await asyncio.sleep(10)  # Scan every 10 seconds
                 
@@ -362,6 +376,12 @@ def get_opportunities():
             "message": "Failed to fetch arbitrage opportunities"
         }), 500
 
+# Add the missing /api/scan route that your frontend expects
+@app.route('/api/scan')
+def trigger_scan():
+    """API endpoint to trigger a scan (alias for opportunities)"""
+    return get_opportunities()
+
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
@@ -383,9 +403,8 @@ scanner_thread.start()
 
 if __name__ == '__main__':
     try:
-        if __name__ == '__main__':
-            port = int(os.environ.get('PORT', 5000))
-            socketio.run(app, debug=True, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+        port = int(os.environ.get('PORT', 5000))
+        socketio.run(app, debug=True, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
         print("\nShutting down...")
         scanner.stop_scanning()
