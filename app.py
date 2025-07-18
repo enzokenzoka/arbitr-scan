@@ -335,18 +335,7 @@ def get_opportunities():
     """API endpoint to get current arbitrage opportunities"""
     try:
         logger.info("=== API ENDPOINT CALLED ===")
-        
-        # Create a new event loop for this request
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # Run a fresh scan
-            loop.run_until_complete(scanner.scan_once())
-        finally:
-            loop.close()
-        
-        logger.info(f"API: Found {len(scanner.opportunities)} opportunities")
+        logger.info(f"API: Found {len(scanner.opportunities)} opportunities from background scanner")
         
         opportunities_data = []
         for opp in scanner.opportunities:
