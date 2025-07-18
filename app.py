@@ -418,7 +418,7 @@ class EnhancedArbitrageScanner:
             try:
                 await self.scan_once()
                 # Wait before next scan
-                await asyncio.sleep(10)  # Scan every 10 seconds
+                await asyncio.sleep(1000)  # Scan every 1000 seconds
                 
             except Exception as e:
                 logger.error(f"Error in scan loop: {e}")
