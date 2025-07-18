@@ -253,6 +253,49 @@
     </style>
 </head>
 <body>
+
+<div id="debug-info" style="background: yellow; padding: 10px; margin: 10px; font-family: monospace;">
+    <h3>🔍 Debug Info:</h3>
+    <p>Page loaded: <span id="page-loaded">No</span></p>
+    <p>API called: <span id="api-called">No</span></p>
+    <p>Data received: <span id="data-received">No</span></p>
+    <p>Opportunities rendered: <span id="opportunities-rendered">No</span></p>
+    <button onclick="testAPI()" style="padding: 5px 10px;">🔄 Test API Now</button>
+</div>
+
+<script>
+// Debug script
+document.getElementById('page-loaded').textContent = 'Yes ✅';
+
+async function testAPI() {
+    try {
+        document.getElementById('api-called').textContent = 'Yes ✅';
+        console.log('🚀 Testing API...');
+        
+        const response = await fetch('/api/opportunities');
+        console.log('📡 Response:', response);
+        
+        const data = await response.json();
+        console.log('📊 Data:', data);
+        
+        document.getElementById('data-received').textContent = `Yes ✅ - ${data.length} items`;
+        
+        if (data.length > 0) {
+            console.log('🎯 First opportunity:', data[0]);
+        }
+        
+    } catch (error) {
+        document.getElementById('data-received').textContent = `❌ Error: ${error.message}`;
+        console.error('💥 API Error:', error);
+    }
+}
+
+// Test API on page load
+window.addEventListener('DOMContentLoaded', testAPI);
+</script>
+
+
+    
     <div class="container">
         <header>
             <h1>🚀 Crypto Arbitrage Scanner</h1>
