@@ -381,6 +381,12 @@
                 <label>&nbsp;</label>
                 <button onclick="manualRefresh()">🔄 Refresh</button>
             </div>
+
+            <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button onclick="debugTest()">🔍 Debug Test</button>
+            </div>
+            
         </div>
 
         <div class="legend">
@@ -604,6 +610,40 @@
             // Initial data load
             setTimeout(manualRefresh, 1000);
         });
+
+        //Debug
+        async function debugTest() {
+    console.log('🔍 Debug test started');
+    
+    try {
+        // Test API call
+        const response = await fetch('/api/opportunities');
+        console.log('📡 Response status:', response.status);
+        
+        const data = await response.json();
+        console.log('📊 Raw data from API:', data);
+        console.log('📊 Data length:', data.length);
+        
+        if (data.length > 0) {
+            console.log('📊 First opportunity:', data[0]);
+        }
+        
+        // Test if rendering function exists
+        if (typeof renderOpportunities === 'function') {
+            console.log('✅ renderOpportunities function exists');
+            opportunities = data;
+            renderOpportunities();
+        } else {
+            console.log('❌ renderOpportunities function missing');
+        }
+        
+        } catch (error) {
+            console.log('❌ Debug test error:', error);
+        }
+    }
+
+
+        
     </script>
 </body>
 </html>
