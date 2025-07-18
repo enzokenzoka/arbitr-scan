@@ -245,7 +245,7 @@ class EnhancedArbitrageScanner:
         }
         self.opportunities = []
         self.running = False
-        self.min_profit_percentage = 0.5
+        self.min_profit_percentage = 0.1  # Lower threshold to see more opportunities
         self.top_n_tokens = 300
         self.token_service = TokenVerificationService()
         
@@ -337,7 +337,7 @@ class EnhancedArbitrageScanner:
                     continue
                 
                 # Filter 3: Minimum volume requirements
-                min_volume_required = 5000  # $5000 minimum volume
+                min_volume_required = 1000  # $1000 minimum volume (reduced from 5000)
                 if (symbol_volumes.get(buy_exchange, 0) < min_volume_required or 
                     symbol_volumes.get(sell_exchange, 0) < min_volume_required):
                     continue
